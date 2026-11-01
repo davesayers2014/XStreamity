@@ -3,7 +3,9 @@
 
 description="
 What is new:
-EPG offset fix for short epg recording times
+Added unique serviceref to all playing streams - to prevent a crash on openpli
+Aspect ratio amends - to reduce threading issues 
+Live player epg refresh timeout amends - to speed up zapping on slow servers
 "
 
 PLUGINPATH=/usr/lib/enigma2/python/Plugins/Extensions/XStreamity

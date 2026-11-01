@@ -59,6 +59,7 @@ from enigma import ePicLoad, eServiceReference, eTimer
 from . import _
 from . import xstreamity_globals as glob
 from .plugin import (cfg, common_path, dir_tmp, downloads_json, pythonVer, screenwidth, skin_directory, hasConcurrent, hasMultiprocessing, debugs, isDreambox)
+from .utils import build_identity_service_ref, build_playing_service_ref, get_playlist_unique_ref
 from .xStaticText import StaticText
 
 try:
@@ -183,6 +184,7 @@ class XStreamity_Vod_Categories(Screen):
         self.password = glob.active_playlist["playlist_info"]["password"]
 
         self.player_api = glob.active_playlist["playlist_info"]["player_api"]
+        self.unique_ref = get_playlist_unique_ref(glob.active_playlist["playlist_info"]["full_url"])
 
         self.token = "ZUp6enk4cko4ZzBKTlBMTFNxN3djd25MOHEzeU5Zak1Bdkd6S3lPTmdqSjhxeUxMSTBNOFRhUGNBMjBCVmxBTzlBPT0K"
 
@@ -1000,8 +1002,9 @@ class XStreamity_Vod_Categories(Screen):
                     trailer = str(channel.get("youtube_trailer", ""))
 
                 next_url = "{}/movie/{}/{}/{}.{}".format(self.host, self.username, self.password, stream_id, container_extension)
+                service_ref = build_identity_service_ref(stream_id, self.unique_ref)
 
-                self.list2.append([index, str(name), str(stream_id), str(cover), str(added), str(rating), str(next_url), favourite, container_extension, year, hidden, tmdb, str(trailer)])
+                self.list2.append([index, str(name), str(stream_id), str(cover), str(added), str(rating), str(next_url), favourite, container_extension, year, hidden, tmdb, str(trailer), service_ref])
         glob.originalChannelList2 = self.list2[:]
 
     def downloadApiData(self, url):
@@ -1071,7 +1074,7 @@ class XStreamity_Vod_Categories(Screen):
 
         self.main_list = [
             buildVodStreamList(
-                x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7], x[8], x[10], x[11], x[12],
+                x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7], x[8], x[10], x[11], x[12], x[13],
                 watched_set, self._px_play, self._px_play2, self._px_fav, self._px_watched
             )
             for x in filtered_list
@@ -2634,7 +2637,12 @@ class XStreamity_Vod_Categories(Screen):
                     next_url = self["main_list"].getCurrent()[3]
                     stream_id = self["main_list"].getCurrent()[4]
 
-                    self.reference = eServiceReference(int(streamtype), 0, next_url)
+                    service_ref = self["main_list"].getCurrent()[-1]
+                    playing_ref = build_playing_service_ref(service_ref, streamtype, next_url)
+                    if playing_ref:
+                        self.reference = eServiceReference(playing_ref)
+                    else:
+                        self.reference = eServiceReference(int(streamtype), 0, next_url)
                     self.reference.setName(glob.currentchannellist[glob.currentchannellistindex][0])
                     # self.session.nav.playService(self.reference)
                     self.session.openWithCallback(self.setIndex, vodplayer.XStreamity_VodPlayer, str(next_url), str(streamtype), stream_id)
@@ -3347,7 +3355,7 @@ def buildCategoryList(index, title, category_id, hidden, px_more=None):
 
 
 def buildVodStreamList(
-    index, title, stream_id, cover, added, rating, next_url, favourite, container_extension, hidden, tmdb, trailer, watched_set,
+    index, title, stream_id, cover, added, rating, next_url, favourite, container_extension, hidden, tmdb, trailer, service_ref, watched_set,
     px_play=None, px_play2=None, px_fav=None, px_watched=None
 ):
 
@@ -3368,4 +3376,4 @@ def buildVodStreamList(
     if is_watched:
         png = px_watched
 
-    return (title, png, index, next_url, stream_id, cover, added, rating, container_extension, hidden, tmdb, trailer)
+    return (title, png, index, next_url, stream_id, cover, added, rating, container_extension, hidden, tmdb, trailer, service_ref)

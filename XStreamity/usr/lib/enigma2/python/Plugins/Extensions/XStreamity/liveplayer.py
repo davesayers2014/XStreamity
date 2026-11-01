@@ -28,7 +28,7 @@ except ImportError:
 # Third-party imports
 from PIL import Image
 import requests
-from requests.adapters import HTTPAdapter, Retry
+from requests.adapters import HTTPAdapter
 from twisted.web.client import downloadPage
 
 # HTTPS twisted client hack (shared SNI helper)
@@ -53,8 +53,8 @@ from Tools.BoundFunction import boundFunction
 from . import _
 from . import xstreamity_globals as glob
 from .plugin import cfg, common_path, dir_tmp, pythonVer, screenwidth, skin_directory
+from .utils import build_playing_service_ref, clearCaches
 from .xStaticText import StaticText
-from .utils import _get_current_aspect_ratio, clearCaches
 
 try:
     from enigma import eAVSwitch
@@ -447,15 +447,14 @@ class XStreamity_StreamPlayer(
                         shortEPGJson = []
                         url = player_api + "&action=get_short_epg&stream_id=" + str(stream_id) + "&limit=2"
 
-                        retries = Retry(total=1, backoff_factor=1)
-                        adapter = HTTPAdapter(max_retries=retries)
+                        adapter = HTTPAdapter(max_retries=0)
 
                         with requests.Session() as http:
                             http.mount("http://", adapter)
                             http.mount("https://", adapter)
 
                             try:
-                                r = http.get(url, headers=hdr, timeout=(10, 20), verify=False)
+                                r = http.get(url, headers=hdr, timeout=(3, 4), verify=False)
                                 r.raise_for_status()
 
                                 if r.status_code == requests.codes.ok:
@@ -560,7 +559,17 @@ class XStreamity_StreamPlayer(
 
             eventid = int(self.streamurl.rpartition("/")[-1].partition(".")[0])
 
-            self.reference = eServiceReference(int(streamtype), 0, self.streamurl)
+            service_ref = ""
+            try:
+                service_ref = glob.currentchannellist[glob.currentchannellistindex][7]
+            except Exception:
+                pass
+
+            playing_ref = build_playing_service_ref(service_ref, streamtype, self.streamurl)
+            if playing_ref:
+                self.reference = eServiceReference(playing_ref)
+            else:
+                self.reference = eServiceReference(int(streamtype), 0, self.streamurl)
 
             # serviceref = eServiceReference(1, 0, self.streamurl)
 
@@ -643,7 +652,17 @@ class XStreamity_StreamPlayer(
         except:
             pass
 
-        self.reference = eServiceReference(int(servicetype), 0, streamurl)
+        service_ref = ""
+        try:
+            service_ref = glob.currentchannellist[glob.currentchannellistindex][7]
+        except Exception:
+            pass
+
+        playing_ref = build_playing_service_ref(service_ref, servicetype, streamurl)
+        if playing_ref:
+            self.reference = eServiceReference(playing_ref)
+        else:
+            self.reference = eServiceReference(int(servicetype), 0, streamurl)
         self.reference.setName(glob.currentchannellist[glob.currentchannellistindex][0])
 
         """
@@ -696,14 +715,6 @@ class XStreamity_StreamPlayer(
         self.originalservicetype = self.servicetype
 
         self.refreshInfobar()
-
-    def applyAspectRatio(self):
-        current_ar = _get_current_aspect_ratio()
-        try:
-            if self.ar_id_player != -1 and current_ar is not None and int(current_ar) != int(self.ar_id_player):
-                self.setAspectRatio(self.ar_id_player)
-        except Exception:
-            pass
 
     def back(self):
         self._cleanupTimer("timerImage")
@@ -889,6 +900,10 @@ class XStreamity_StreamPlayer(
 
             self.streamurl = glob.currentchannellist[glob.currentchannellistindex][3]
             self.playStream(self.servicetype, self.streamurl)
+
+    def applyAspectRatio(self):
+        if self.ar_id_player != -1:
+            self.setAspectRatio(self.ar_id_player)
 
     def setAspectRatio(self, ar_index):
         try:

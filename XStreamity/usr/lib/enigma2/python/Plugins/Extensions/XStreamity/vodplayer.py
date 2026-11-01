@@ -49,8 +49,8 @@ except ImportError as e:
 from . import _
 from . import xstreamity_globals as glob
 from .plugin import cfg, common_path, dir_tmp, pythonVer, screenwidth, skin_directory
+from .utils import build_playing_service_ref, clearCaches
 from .xStaticText import StaticText
-from .utils import _get_current_aspect_ratio, clearCaches
 
 try:
     from enigma import eAVSwitch
@@ -587,7 +587,18 @@ class XStreamity_VodPlayer(
         except:
             pass
 
-        self.reference = eServiceReference(int(self.servicetype), 0, streamurl)
+        service_ref = ""
+        if self.stream_id is not None:
+            try:
+                service_ref = glob.currentchannellist[glob.currentchannellistindex][-1]
+            except Exception:
+                pass
+
+        playing_ref = build_playing_service_ref(service_ref, servicetype, streamurl)
+        if playing_ref:
+            self.reference = eServiceReference(playing_ref)
+        else:
+            self.reference = eServiceReference(int(servicetype), 0, streamurl)
         self.reference.setName(glob.currentchannellist[glob.currentchannellistindex][0])
 
         self.session.nav.playService(self.reference)
@@ -617,14 +628,6 @@ class XStreamity_VodPlayer(
             self.arTimer_conn = self.arTimer.timeout.connect(self.applyAspectRatio)
 
         self.arTimer.start(200, True)
-
-    def applyAspectRatio(self):
-        current_ar = _get_current_aspect_ratio()
-        try:
-            if self.ar_id_player != -1 and current_ar is not None and int(current_ar) != int(self.ar_id_player):
-                self.setAspectRatio(self.ar_id_player)
-        except Exception:
-            pass
 
     def loadDefaultImage(self, data=None):
         if self["cover"].instance:
@@ -860,6 +863,10 @@ class XStreamity_VodPlayer(
                     return
                 self.streamurl = glob.currentchannellist[glob.currentchannellistindex][3]
                 self.playStream(self.servicetype, self.streamurl)
+
+    def applyAspectRatio(self):
+        if self.ar_id_player != -1:
+            self.setAspectRatio(self.ar_id_player)
 
     def setAspectRatio(self, ar_index):
         try:

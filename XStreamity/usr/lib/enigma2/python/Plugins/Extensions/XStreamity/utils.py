@@ -16,6 +16,43 @@ except Exception:
     pass
 
 
+def build_playing_service_ref(service_ref, servicetype, streamurl):
+    """Build a playable ref while retaining the channel's DVB/EPG identity."""
+    try:
+        ref_parts = str(service_ref or "").split(":")
+        if len(ref_parts) < 10:
+            return None
+
+        # Keep flags, SID, TSID, ONID and namespace from the EPG reference,
+        # but use the selected IPTV player and the real stream URL.
+        ref_parts = ref_parts[:10]
+        ref_parts[0] = str(servicetype)
+        escaped_url = str(streamurl).replace(":", "%3a")
+        return ":".join(ref_parts + [escaped_url])
+    except Exception:
+        return None
+
+
+def build_identity_service_ref(stream_id, unique_ref):
+    """Build the stable dummy service ref used as an item's identity."""
+    try:
+        bouquet_id1 = int(stream_id) // 65535
+        bouquet_id2 = int(stream_id) - (bouquet_id1 * 65535)
+        return "1:0:1:{:x}:{:x}:{:x}:0:0:0:0:http%3a//example.m3u8".format(
+            bouquet_id1, bouquet_id2, int(unique_ref)
+        )
+    except Exception:
+        return ""
+
+
+def get_playlist_unique_ref(full_url):
+    """Return the playlist identity used in generated service references."""
+    try:
+        return sum(ord(character) for character in str(full_url))
+    except Exception:
+        return 0
+
+
 def _cleanup_epg_folders(playlists_all, cfg, dir_tmp):
     import shutil
     epg_root = os.path.join(str(cfg.epglocation.value).rstrip("/"), "iptv-epg")

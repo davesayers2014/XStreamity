@@ -58,6 +58,7 @@ from enigma import ePicLoad, eServiceReference, eTimer
 from . import _
 from . import xstreamity_globals as glob
 from .plugin import (cfg, common_path, dir_tmp, downloads_json, pythonVer, screenwidth, skin_directory, hasConcurrent, hasMultiprocessing, debugs, isDreambox)
+from .utils import build_identity_service_ref, build_playing_service_ref, get_playlist_unique_ref
 
 from .xStaticText import StaticText
 
@@ -187,6 +188,7 @@ class XStreamity_Series_Categories(Screen):
         self.username = glob.active_playlist["playlist_info"]["username"]
         self.password = glob.active_playlist["playlist_info"]["password"]
         self.player_api = glob.active_playlist["playlist_info"]["player_api"]
+        self.unique_ref = get_playlist_unique_ref(glob.active_playlist["playlist_info"]["full_url"])
 
         self.token = "ZUp6enk4cko4ZzBKTlBMTFNxN3djd25MOHEzeU5Zak1Bdkd6S3lPTmdqSjhxeUxMSTBNOFRhUGNBMjBCVmxBTzlBPT0K"
 
@@ -1354,9 +1356,10 @@ class XStreamity_Series_Categories(Screen):
                         hidden = str(stream_id) in glob.active_playlist["player_info"]["seriesepisodeshidden"]
 
                         next_url = "{}/series/{}/{}/{}.{}".format(self.host, self.username, self.password, stream_id, container_extension)
+                        service_ref = build_identity_service_ref(stream_id, self.unique_ref)
 
-                        # 0 index, 1 title, 2 stream_id, 3 cover, 4 plot, 5 cast, 6 director, 7 genre, 8 releasedate, 9 rating, 10 last_modified, 11 next_url, 12 tmdb_id, 13 hidden, 14 duration, 15 container_extension, 16 shorttitle, 17 episode_num, 18 parent_index, 19 parent_id
-                        self.list4.append([index, str(title), str(stream_id), str(cover), str(plot), str(cast), str(director), str(genre), str(releasedate), str(rating), str(last_modified), str(next_url), str(tmdb_id), hidden, str(duration), str(container_extension),  str(shorttitle), episode_num, parent_index, str(parent_id)])
+                        # 0 index, 1 title, 2 stream_id, 3 cover, 4 plot, 5 cast, 6 director, 7 genre, 8 releasedate, 9 rating, 10 last_modified, 11 next_url, 12 tmdb_id, 13 hidden, 14 duration, 15 container_extension, 16 shorttitle, 17 episode_num, 18 parent_index, 19 parent_id, 20 service_ref
+                        self.list4.append([index, str(title), str(stream_id), str(cover), str(plot), str(cast), str(director), str(genre), str(releasedate), str(rating), str(last_modified), str(next_url), str(tmdb_id), hidden, str(duration), str(container_extension),  str(shorttitle), episode_num, parent_index, str(parent_id), service_ref])
 
         glob.originalChannelList4 = self.list4[:]
 
@@ -1442,7 +1445,7 @@ class XStreamity_Series_Categories(Screen):
 
         watched_set = set(str(x) for x in glob.active_playlist["player_info"].get("serieswatched", []))
 
-        self.main_list = [buildSeriesEpisodesList(x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7], x[8], x[9], x[10], x[11], x[12], x[13], x[14], x[15], x[16], x[17], x[18], x[19], watched_set, self._px_play, self._px_watched) for x in self.list4 if not x[13]]
+        self.main_list = [buildSeriesEpisodesList(x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7], x[8], x[9], x[10], x[11], x[12], x[13], x[14], x[15], x[16], x[17], x[18], x[19], x[20], watched_set, self._px_play, self._px_watched) for x in self.list4 if not x[13]]
         self["main_list"].setList(self.main_list)
         if self["main_list"].getCurrent():
             self["main_list"].setIndex(glob.nextlist[-1]["index"])
@@ -3074,7 +3077,12 @@ class XStreamity_Series_Categories(Screen):
                     next_url = self["main_list"].getCurrent()[3]
                     stream_id = self["main_list"].getCurrent()[4]
 
-                    self.reference = eServiceReference(int(streamtype), 0, next_url)
+                    service_ref = self["main_list"].getCurrent()[-1]
+                    playing_ref = build_playing_service_ref(service_ref, streamtype, next_url)
+                    if playing_ref:
+                        self.reference = eServiceReference(playing_ref)
+                    else:
+                        self.reference = eServiceReference(int(streamtype), 0, next_url)
                     self.reference.setName(glob.currentchannellist[glob.currentchannellistindex][0])
                     # self.session.nav.playService(self.reference)
                     self.session.openWithCallback(self.setIndex, vodplayer.XStreamity_VodPlayer, str(next_url), str(streamtype), stream_id)
@@ -3488,6 +3496,6 @@ def buildSeriesSeasonsList(index, title, series_id, cover, plot, cast, director,
     return (title, png, index, next_url, series_id, cover, plot, cast, director, genre, airDate, rating, season_number, lastmodified, hidden, tmdb, backdrop_path, parent_index, parent_id)
 
 
-def buildSeriesEpisodesList(index, title, series_id, cover, plot, cast, director, genre, releaseDate, rating, lastmodified, next_url, tmdb_id, hidden, duration, container_extension, shorttitle, episode_number, parent_index, parent_id, watched_set, px_play, px_watched):
+def buildSeriesEpisodesList(index, title, series_id, cover, plot, cast, director, genre, releaseDate, rating, lastmodified, next_url, tmdb_id, hidden, duration, container_extension, shorttitle, episode_number, parent_index, parent_id, service_ref, watched_set, px_play, px_watched):
     png = px_watched if str(series_id) in watched_set else px_play
-    return (title, png, index, next_url, series_id, cover, plot, cast, director, genre, releaseDate, rating, duration, container_extension, tmdb_id, shorttitle, lastmodified, hidden, episode_number, parent_index, parent_id)
+    return (title, png, index, next_url, series_id, cover, plot, cast, director, genre, releaseDate, rating, duration, container_extension, tmdb_id, shorttitle, lastmodified, hidden, episode_number, parent_index, parent_id, service_ref)

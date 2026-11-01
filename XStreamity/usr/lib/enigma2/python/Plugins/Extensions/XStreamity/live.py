@@ -55,6 +55,7 @@ from enigma import eEPGCache, eServiceReference, eTimer
 from . import _
 from . import xstreamity_globals as glob
 from .plugin import cfg, common_path, dir_tmp, pythonVer, screenwidth, skin_directory, hasConcurrent, hasMultiprocessing, debugs, isDreambox
+from .utils import build_playing_service_ref
 from .xStaticText import StaticText
 
 # HTTPS twisted client hack (shared SNI helper)
@@ -918,7 +919,7 @@ class XStreamity_Live_Categories(Screen):
         if self.chosen_category == "favourites":
             self.main_list = [
                 buildLiveStreamList(
-                    x[0], x[1], x[2], x[3], x[15], x[16], x[17], x[18],
+                    x[0], x[1], x[2], x[3], x[15], x[16], x[17], x[18], x[8],
                     self._px_play, self._px_fav, self._px_watching
                 )
                 for x in self.list2 if x[16] is True
@@ -927,7 +928,7 @@ class XStreamity_Live_Categories(Screen):
         else:
             self.main_list = [
                 buildLiveStreamList(
-                    x[0], x[1], x[2], x[3], x[15], x[16], x[17], x[18],
+                    x[0], x[1], x[2], x[3], x[15], x[16], x[17], x[18], x[8],
                     self._px_play, self._px_fav, self._px_watching
                 )
                 for x in self.list2 if x[18] is False
@@ -1525,7 +1526,12 @@ class XStreamity_Live_Categories(Screen):
                         if streamtype == "1":
                             streamtype = "4097"
 
-                    self.reference = eServiceReference(int(streamtype), 0, str(next_url))
+                    service_ref = self["main_list"].getCurrent()[7]
+                    playing_ref = build_playing_service_ref(service_ref, streamtype, next_url)
+                    if playing_ref:
+                        self.reference = eServiceReference(playing_ref)
+                    else:
+                        self.reference = eServiceReference(int(streamtype), 0, str(next_url))
                     self.reference.setName(glob.currentchannellist[glob.currentchannellistindex][0])
 
                     def update_channel_icons_and_list():
@@ -1535,7 +1541,7 @@ class XStreamity_Live_Categories(Screen):
                         if self.chosen_category == "favourites":
                             self.main_list = [
                                 buildLiveStreamList(
-                                    x[0], x[1], x[2], x[3], x[15], x[16], x[17], x[18],
+                                    x[0], x[1], x[2], x[3], x[15], x[16], x[17], x[18], x[8],
                                     self._px_play, self._px_fav, self._px_watching
                                 )
                                 for x in self.list2 if x[16] is True
@@ -1543,7 +1549,7 @@ class XStreamity_Live_Categories(Screen):
                         else:
                             self.main_list = [
                                 buildLiveStreamList(
-                                    x[0], x[1], x[2], x[3], x[15], x[16], x[17], x[18],
+                                    x[0], x[1], x[2], x[3], x[15], x[16], x[17], x[18], x[8],
                                     self._px_play, self._px_fav, self._px_watching
                                 )
                                 for x in self.list2 if x[18] is False
@@ -1612,7 +1618,7 @@ class XStreamity_Live_Categories(Screen):
             if self.chosen_category == "favourites":
                 self.main_list = [
                     buildLiveStreamList(
-                        x[0], x[1], x[2], x[3], x[15], x[16], x[17], x[18],
+                        x[0], x[1], x[2], x[3], x[15], x[16], x[17], x[18], x[8],
                         self._px_play, self._px_fav, self._px_watching
                     )
                     for x in self.list2 if x[16] is True
@@ -1620,7 +1626,7 @@ class XStreamity_Live_Categories(Screen):
             else:
                 self.main_list = [
                     buildLiveStreamList(
-                        x[0], x[1], x[2], x[3], x[15], x[16], x[17], x[18],
+                        x[0], x[1], x[2], x[3], x[15], x[16], x[17], x[18], x[8],
                         self._px_play, self._px_fav, self._px_watching
                     )
                     for x in self.list2 if x[18] is False
@@ -2395,7 +2401,7 @@ def buildCategoryList(index, title, category_id, hidden, px_more=None):
     return (title, px_more, index, category_id, hidden)
 
 
-def buildLiveStreamList(index, name, stream_id, stream_icon, next_url, favourite, watching, hidden, px_play=None, px_fav=None, px_watching=None):
+def buildLiveStreamList(index, name, stream_id, stream_icon, next_url, favourite, watching, hidden, service_ref, px_play=None, px_fav=None, px_watching=None):
     png = px_play
 
     if favourite:
@@ -2404,4 +2410,4 @@ def buildLiveStreamList(index, name, stream_id, stream_icon, next_url, favourite
     if watching:
         png = px_watching
 
-    return (name, png, index, next_url, stream_id, stream_icon, hidden)
+    return (name, png, index, next_url, stream_id, stream_icon, hidden, service_ref)
