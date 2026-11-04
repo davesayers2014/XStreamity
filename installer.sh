@@ -3,9 +3,7 @@
 
 description="
 What is new:
-Added unique serviceref to all playing streams - to prevent a crash on openpli
-Aspect ratio amends - to reduce threading issues 
-Live player epg refresh timeout amends - to speed up zapping on slow servers
+Hack-a-vision API call amends
 "
 
 PLUGINPATH=/usr/lib/enigma2/python/Plugins/Extensions/XStreamity

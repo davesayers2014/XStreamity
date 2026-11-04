@@ -1,17 +1,16 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-from __future__ import division
+from __future__ import division, print_function
 
 # Standard library imports
 import json
 import os
-import base64
-import zlib
+import random
 
 try:
     from urlparse import urlparse, parse_qsl  # Python 2
-    from urllib import urlencode  # Python 2
+    from urllib import urlencode
 except:
     from urllib.parse import urlparse, parse_qsl, urlencode  # Python 3
 
@@ -22,8 +21,11 @@ except ImportError:
     from httplib import HTTPConnection
     HTTPConnection.debuglevel = 0
 
-# Third-party imports
-import requests
+# Third-party imports. Some older Enigma2 images do not ship requests.
+try:
+    import requests
+except ImportError:
+    requests = None
 
 # Enigma2 components
 from Components.ActionMap import ActionMap
@@ -41,9 +43,7 @@ from .plugin import skin_directory, cfg, common_path, version, hasConcurrent, ha
 from .xStaticText import StaticText
 
 
-hdr = {
-    'User-Agent': str(cfg.useragent.value)
-}
+hdr = {}
 
 scans_dir = os.path.join(dir_tmp, "scans")
 badurls_file = os.path.join(scans_dir, "badurls.txt")
@@ -51,14 +51,11 @@ badurls_file = os.path.join(scans_dir, "badurls.txt")
 scanner_playlist_file = os.path.join(scans_dir, "playlists.txt")
 scanner_playlists_json = os.path.join(scans_dir, "x-playlists.json")
 
-compressed_base_url = b'x\x9c\xb3\xf5\xcc\xf2\xcd\t4\xf0\xcd\t\rO\xca0\xcdM\xce\xf1\x8bHq\xf7\x0b\xf1r\t\x0b\xf1*\xcfpO.\r\x8c\x88\xca\xf3\x02\xaaq\x04bW\x98\xba\xf0\xa8\xe2\x9c\xdc(KW\xe3\x80\xb2t\xa3\xc8J\xb7\xf0\xa8*\xcb`_#\xcb\xe0\xc4r7#\x9f\xb2\x9c\\\x9fR7\xa3\xc8\xaa\x8a\xdcdC\xcbJ\x1f3_\x8fd\x83 \x8fD\x00\xcc\xd4$a'
-
-
-def get_base_url():
-    reversed_encoded = zlib.decompress(compressed_base_url).decode('utf-8')
-    encoded = reversed_encoded[::-1]
-    original_url = base64.b64decode(encoded).decode('utf-8')
-    return original_url
+URLSCAN_API_URL = "https://urlscan.io/api/v1/search/"
+URLSCAN_API_KEYS = ["01a19ddb-3052-715c-a635-d66c80169c2d", "01a1a6e9-b1ac-73a3-b618-2f8ff4afd046", "01a1a6fb-53c4-741d-83c9-1844cda24e47"]
+URLSCAN_QUERY = 'files.mimeDescription:"M3U playlist" AND task.url:"get.php"'
+URLSCAN_PAGE_SIZE = 100
+URLSCAN_MAX_PAGES = 3
 
 
 def sort_key(item):
@@ -93,6 +90,14 @@ class XStreamity_Scanner(Screen):
     def __init__(self, session):
         Screen.__init__(self, session)
         self.session = session
+        self.original_playlist_file = cfg.playlist_file.value
+        self.original_playlists_json = cfg.playlists_json.value
+        self.original_current_selection = getattr(glob, "current_selection", 0)
+        self.original_active_playlist = getattr(glob, "active_playlist", {})
+        self.scantimer = None
+        self.timer = None
+        self._scanner_restored = False
+        self.onClose.append(self.restoreOriginalPlaylists)
 
         if cfg.interface.value == "xstreamity":
             skin_path = os.path.join(skin_directory, cfg.interface.value, cfg.xstreamity_skin.value)
@@ -111,6 +116,7 @@ class XStreamity_Scanner(Screen):
         self["key_yellow"] = StaticText()
         self["key_blue"] = StaticText(_("Info"))
         self["version"] = StaticText()
+        self["key_menu"] = StaticText()
 
         self.list = []
         self.drawList = []
@@ -134,44 +140,58 @@ class XStreamity_Scanner(Screen):
             "info": self.openUserInfo,
         }, -2)
 
-        self.onFirstExecBegin.append(self.start)
+        self.onFirstExecBegin.append(self.safeStart)
         self.onLayoutFinish.append(self.__layoutFinished)
 
     def __layoutFinished(self):
         self.setTitle(self.setup_title)
 
+    def safeStart(self):
+        try:
+            self.start()
+        except Exception as e:
+            print("*** Scanner start error ***", repr(e))
+            self.quit()
+
+    def safeMakeScanUrlData(self):
+        try:
+            self.makeScanUrlData()
+        except Exception as e:
+            print("*** Scanner search error ***", repr(e))
+            self.quit()
+
+    def safeMakeUrlList(self):
+        try:
+            self.makeUrlList()
+        except Exception as e:
+            print("*** Scanner playlist error ***", repr(e))
+            self.quit()
+
     def start(self):
-        self.original_playlist_file = cfg.playlist_file.value
-        self.original_playlists_json = cfg.playlists_json.value
         glob.original_playlist_file = self.original_playlist_file
         glob.original_playlists_json = self.original_playlists_json
 
-        cfg.playlist_file.value = scanner_playlist_file  # Force overwrite
-        cfg.playlist_file.save()
+        if os.path.realpath(self.original_playlist_file) == os.path.realpath(scanner_playlist_file):
+            raise RuntimeError("Original playlists.txt uses the scanner path")
 
-        cfg.playlists_json.value = scanner_playlists_json  # Force overwrite
-        cfg.playlists_json.save()
+        if os.path.realpath(self.original_playlists_json) == os.path.realpath(scanner_playlists_json):
+            raise RuntimeError("Original x-playlists.json uses the scanner path")
 
         self["version"].setText(version)
-
-        if os.path.exists(scans_dir):
-            for file_name in ["playlists.txt", "x-playlists.json"]:
-                file_path = os.path.join(scans_dir, file_name)
-                if os.path.exists(file_path):
-                    os.remove(file_path)
+        self.cleanupScannerFiles()
 
         self.scantimer = eTimer()
         try:
-            self.scantimer_conn = self.scantimer.timeout.connect(self.makeScanUrlData)
+            self.scantimer_conn = self.scantimer.timeout.connect(self.safeMakeScanUrlData)
         except:
             try:
-                self.scantimer.callback.append(self.makeScanUrlData)
+                self.scantimer.callback.append(self.safeMakeScanUrlData)
             except:
-                self.makeScanUrlData()
+                self.safeMakeScanUrlData()
+                return
         self.scantimer.start(10, True)
 
     def makeScanUrlData(self):
-        base_url = get_base_url()
         search_after = None
 
         if not os.path.exists(scans_dir):
@@ -185,27 +205,45 @@ class XStreamity_Scanner(Screen):
 
         final_urls_to_write_set = set()  # Use a set to store unique URLs
 
-        for i in range(5):
-            if not search_after:
-                url = base_url
-            else:
-                url = "{}&search_after={}".format(base_url, search_after)
+        if not URLSCAN_API_KEYS:
+            self.quit()
+            return
 
-            response = self.download_url([url, i])
+        api_key = random.choice(URLSCAN_API_KEYS)
+
+        for i in range(URLSCAN_MAX_PAGES):
+            headers = {
+                "API-Key": api_key,
+                "Accept": "application/json",
+            }
+            params = {
+                "q": URLSCAN_QUERY,
+                "size": URLSCAN_PAGE_SIZE,
+            }
+            if search_after:
+                params["search_after"] = search_after
+
+            response = self.download_url([URLSCAN_API_URL, i, headers, params])
+
+            # print("*** response ***", json.dumps(response))
 
             if not response:
-                continue
+                break
 
             data = response[1]
 
             if not data or not data.get("results"):
-                continue
+                break
 
             for task in data["results"]:
-                if "files" in task and len(task["files"]) > 0:
-                    task_url = task["files"][0]["url"]
+                for scanned_file in task.get("files", []):
+                    task_url = scanned_file.get("url", "")
+                    if "get.php" not in task_url:
+                        continue
 
                     parsed_url = urlparse(task_url)
+                    if not parsed_url.scheme or not parsed_url.hostname:
+                        continue
 
                     query_params = dict(parse_qsl(parsed_url.query))
 
@@ -223,20 +261,27 @@ class XStreamity_Scanner(Screen):
                     if url_without_server.strip() in bad_urls:
                         continue
 
-                    if "/get.php?" in task_url:
+                    if "get.php" in parsed_url.path and parsed_url.query:
                         final_urls_to_write_set.add((task_url, parsed_url.hostname))
 
             last_task = data["results"][-1]
-            if "sort" in last_task and len(last_task["sort"]) > 0:
+            if "sort" in last_task and len(last_task["sort"]) >= 2:
                 search_after = "{},{}".format(last_task["sort"][0], last_task["sort"][1])
             else:
                 break
 
         final_urls_to_write = list(final_urls_to_write_set)
 
+        if not final_urls_to_write:
+            self.quit()
+            return
+
         with open(scanner_playlist_file, "a") as f:
             for url, domain in final_urls_to_write:
                 f.write(url + " #" + str(domain) + "\n")
+
+        cfg.playlist_file.setValue(scanner_playlist_file)
+        cfg.playlists_json.setValue(scanner_playlists_json)
 
         from . import processscanfiles as loadfiles
         self.playlists_all = loadfiles.process_files()
@@ -244,18 +289,18 @@ class XStreamity_Scanner(Screen):
         if self.playlists_all and os.path.isfile(scanner_playlist_file) and os.path.getsize(scanner_playlist_file) > 0:
             self.delayedDownload()
         else:
-            self["splash"].hide()
-            self.close()
+            self.quit()
 
     def delayedDownload(self):
         self.timer = eTimer()
         try:
-            self.timer_conn = self.timer.timeout.connect(self.makeUrlList)
+            self.timer_conn = self.timer.timeout.connect(self.safeMakeUrlList)
         except:
             try:
-                self.timer.callback.append(self.makeUrlList)
+                self.timer.callback.append(self.safeMakeUrlList)
             except:
-                self.makeUrlList()
+                self.safeMakeUrlList()
+                return
         self.timer.start(10, True)
 
     def makeUrlList(self):
@@ -271,34 +316,44 @@ class XStreamity_Scanner(Screen):
 
         if self.url_list:
             self.process_downloads()
+        else:
+            self.quit()
 
     def download_url(self, url):
         index = url[1]
+        extra_headers = url[2] if len(url) > 2 else {}
+        params = url[3] if len(url) > 3 else None
         response = None
 
-        with requests.Session() as http:
-            try:
-                r = http.get(url[0], headers=hdr, timeout=5, verify=False)
-                r.raise_for_status()
-                content_type = r.headers.get('Content-Type', '')
-                if 'application/json' in content_type:
-                    try:
-                        response = r.json()
-                    except ValueError:
-                        return index, None
-                elif 'text/html' in content_type:
-                    try:
-                        response_text = r.text
-                        response = json.loads(response_text)
-                    except ValueError:
-                        return index, None
+        request_headers = dict(hdr)
+        request_headers.update(extra_headers)
 
-                else:
-                    return index, None
+        if requests is not None:
+            try:
+                with requests.Session() as http:
+                    r = http.get(
+                        url[0],
+                        headers=request_headers,
+                        params=params,
+                        timeout=(5, 10),
+                        verify=False
+                    )
+
+                    r.raise_for_status()
+                    response = r.json()
+
+            except requests.exceptions.HTTPError as e:
+                # print("*** Requests HTTP error ***", repr(e))
+                if url[0] == URLSCAN_API_URL and e.response is not None:
+                    if e.response.status_code == 429:
+                        return index, None
 
             except requests.exceptions.RequestException:
+                # print("*** Requests error ***", repr(e))
                 pass
-            except Exception:
+
+            except ValueError:
+                # print("*** JSON error ***", repr(e))
                 pass
 
         return index, response
@@ -356,6 +411,10 @@ class XStreamity_Scanner(Screen):
             playlist for i, playlist in enumerate(self.playlists_all)
             if i not in indices_to_remove
         ]
+
+        if not self.playlists_all:
+            self.quit()
+            return
 
         self.buildPlaylistList()
 
@@ -443,6 +502,7 @@ class XStreamity_Scanner(Screen):
             maxc = ""
             maxnum = ""
             expires = ""
+            exp_ts = None
 
             user_info = playlist.get("user_info", {})
 
@@ -477,7 +537,6 @@ class XStreamity_Scanner(Screen):
 
                     if user_status == "Active":
                         exp_date = user_info.get("exp_date")
-                        exp_ts = None
                         if exp_date:
                             try:
                                 exp_ts = int(exp_date)  # already in seconds
@@ -507,6 +566,10 @@ class XStreamity_Scanner(Screen):
 
         self.list.sort(key=sort_key)
 
+        if not self.list:
+            self.quit()
+            return
+
         self["splash"].hide()
 
         self.drawList = [self.buildListEntry(x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7], x[8]) for x in self.list]
@@ -535,17 +598,44 @@ class XStreamity_Scanner(Screen):
 
         return (index, str(name), str(url), str(expires), str(status), pixmap, str(active), str(activenum), str(maxc), str(maxnum))
 
-    def quit(self, answer=None):
-        if os.path.exists(scans_dir):
-            for file_name in ["playlists.txt", "x-playlists.json"]:
-                file_path = os.path.join(scans_dir, file_name)
-                if os.path.exists(file_path):
+    def cleanupScannerFiles(self):
+        original_paths = [
+            os.path.realpath(self.original_playlist_file),
+            os.path.realpath(self.original_playlists_json)
+        ]
+
+        for file_path in [scanner_playlist_file, scanner_playlists_json]:
+            if os.path.realpath(file_path) in original_paths:
+                # print("*** Skipping original playlist file ***", file_path)
+                continue
+
+            if os.path.isfile(file_path):
+                try:
                     os.remove(file_path)
+                except OSError as e:
+                    print("*** Scanner file cleanup error ***", repr(e))
+
+    def restoreOriginalPlaylists(self):
+        if self._scanner_restored:
+            return
+
+        self._scanner_restored = True
+
+        for timer in [self.scantimer, self.timer]:
+            if timer is not None:
+                timer.stop()
 
         cfg.playlist_file.setValue(self.original_playlist_file)
         cfg.playlists_json.setValue(self.original_playlists_json)
-        glob.current_selection = 0
         cfg.save()
+
+        glob.current_selection = self.original_current_selection
+        glob.active_playlist = self.original_active_playlist
+
+        self.cleanupScannerFiles()
+
+    def quit(self, answer=None):
+        self.restoreOriginalPlaylists()
         self["splash"].hide()
         self.close()
 
