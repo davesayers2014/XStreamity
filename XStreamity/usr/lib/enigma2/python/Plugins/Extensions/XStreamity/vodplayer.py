@@ -51,6 +51,7 @@ from . import xstreamity_globals as glob
 from .plugin import cfg, common_path, dir_tmp, pythonVer, screenwidth, skin_directory
 from .utils import build_playing_service_ref, clearCaches
 from .xStaticText import StaticText
+from .trackselection import XStreamityTrackSelection
 
 try:
     from enigma import eAVSwitch
@@ -357,6 +358,7 @@ class XStreamity_VodPlayer(
     InfoBarMoviePlayerSummarySupport,
     SubsSupportStatus,
     SubsSupport,
+    XStreamityTrackSelection,
         Screen):
 
     ENABLE_RESUME_SUPPORT = True
@@ -384,6 +386,8 @@ class XStreamity_VodPlayer(
             print(e)
 
         IPTVInfoBarPVRState.__init__(self, PVRState, True)
+
+        XStreamityTrackSelection.__init__(self, subtitles=not cfg.subs.value)
 
         self.ar_id_player = -1
         try:
@@ -602,6 +606,10 @@ class XStreamity_VodPlayer(
         self.reference.setName(glob.currentchannellist[glob.currentchannellistindex][0])
 
         self.session.nav.playService(self.reference)
+
+        # start auto track selection directly - evStart is not sent when the
+        # stream is already playing (live preview) or by some stream types
+        self.startTrackSelection()
 
         if cfg.infobarcovers.value is True:
             self.downloadImage()

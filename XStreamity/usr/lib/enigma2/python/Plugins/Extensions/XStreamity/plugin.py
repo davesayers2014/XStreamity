@@ -261,6 +261,28 @@ cfg.TMDBLanguage2 = ConfigSelection(default="", choices=languages)
 cfg.catchupstart = ConfigSelectionNumber(0, 30, 1, default=0, wraparound=True)
 cfg.catchupend = ConfigSelectionNumber(0, 30, 1, default=0, wraparound=True)
 cfg.subs = ConfigYesNo(default=False)
+# Automatic audio / subtitle track selection (see trackselection.py)
+from .tracklanguages import language_choices
+# Language names use the image's own translations (already loaded) and are
+# built once - translating each entry through the plugin domain stalls boot.
+try:
+    from gettext import gettext as _image_tr
+except Exception:
+    def _image_tr(text):
+        return text
+_track_langs = language_choices(_image_tr)
+cfg.tracksource = ConfigSelection(default="xstreamity", choices=[
+    ("off", _("Off")),
+    ("xstreamity", _("XStreamity settings")),
+])
+cfg.audiolang1 = ConfigSelection(default="", choices=_track_langs)
+cfg.audiolang2 = ConfigSelection(default="", choices=_track_langs)
+cfg.audiolang3 = ConfigSelection(default="", choices=_track_langs)
+cfg.audioac3 = ConfigYesNo(default=False)
+cfg.sublang1 = ConfigSelection(default="", choices=_track_langs)
+cfg.sublang2 = ConfigSelection(default="", choices=_track_langs)
+cfg.sublang3 = ConfigSelection(default="", choices=_track_langs)
+cfg.subsamelang = ConfigYesNo(default=False)
 cfg.skipplaylistsscreen = ConfigYesNo(default=False)
 cfg.autoepg = ConfigYesNo(default=True)
 cfg.wakeup = ConfigClock(default=((9 * 60) + 9) * 60)

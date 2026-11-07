@@ -55,6 +55,7 @@ from . import xstreamity_globals as glob
 from .plugin import cfg, common_path, dir_tmp, pythonVer, screenwidth, skin_directory
 from .utils import build_playing_service_ref, clearCaches
 from .xStaticText import StaticText
+from .trackselection import XStreamityTrackSelection
 
 try:
     from enigma import eAVSwitch
@@ -271,6 +272,7 @@ class XStreamity_StreamPlayer(
     InfoBarSummarySupport,
     InfoBarSubtitleSupport,
     InfoBarMoviePlayerSummarySupport,
+    XStreamityTrackSelection,
         Screen):
 
     ALLOW_SUSPEND = True
@@ -294,6 +296,8 @@ class XStreamity_StreamPlayer(
             x.__init__(self)
 
         IPTVInfoBarPVRState.__init__(self, PVRState, True)
+
+        XStreamityTrackSelection.__init__(self, subtitles=True)
 
         self.ar_id_player = -1
         try:
@@ -686,6 +690,10 @@ class XStreamity_StreamPlayer(
             self.session.nav.playService(self.reference)
         except Exception as e:
             print(e)
+
+        # start auto track selection directly - evStart is not sent when the
+        # stream is already playing (live preview) or by some stream types
+        self.startTrackSelection()
 
         nowref = self.session.nav.getCurrentlyPlayingServiceReference()
         if nowref:

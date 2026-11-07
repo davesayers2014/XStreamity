@@ -181,6 +181,15 @@ class XStreamity_Settings(ConfigListScreen, Screen, ProtectedScreen):
         self.cfg_TMDBLanguage2 = getConfigListEntry(_("Movie Database language"), cfg.TMDBLanguage2)
         self.cfg_catchupstart = getConfigListEntry(_("Margin before catchup (mins)"), cfg.catchupstart)
         self.cfg_catchupend = getConfigListEntry(_("Margin after catchup (mins)"), cfg.catchupend)
+        self.cfg_tracksource = getConfigListEntry(_("Auto select audio & subtitle tracks"), cfg.tracksource)
+        self.cfg_audiolang1 = getConfigListEntry(_("Preferred audio language 1"), cfg.audiolang1)
+        self.cfg_audiolang2 = getConfigListEntry(_("Preferred audio language 2"), cfg.audiolang2)
+        self.cfg_audiolang3 = getConfigListEntry(_("Preferred audio language 3"), cfg.audiolang3)
+        self.cfg_audioac3 = getConfigListEntry(_("Prefer Dolby (AC3) audio tracks"), cfg.audioac3)
+        self.cfg_sublang1 = getConfigListEntry(_("Preferred subtitle language 1"), cfg.sublang1)
+        self.cfg_sublang2 = getConfigListEntry(_("Preferred subtitle language 2"), cfg.sublang2)
+        self.cfg_sublang3 = getConfigListEntry(_("Preferred subtitle language 3"), cfg.sublang3)
+        self.cfg_subsamelang = getConfigListEntry(_("Show subtitles in same language as audio"), cfg.subsamelang)
         self.cfg_subs = getConfigListEntry(_("Allow SubsSupport plugin in VOD"), cfg.subs)
         self.cfg_skipplaylistsscreen = getConfigListEntry(_("Skip playlist selection screen if only 1 playlist"), cfg.skipplaylistsscreen)
         self.cfg_autoepg = getConfigListEntry(_("Automatic EPG download") + _(" *Restart GUI Required"), cfg.autoepg)
@@ -226,6 +235,15 @@ class XStreamity_Settings(ConfigListScreen, Screen, ProtectedScreen):
             self.cfg_epglocation,
             self.cfg_downloadlocation,
             self.cfg_ar_id_player,
+            self.cfg_tracksource,
+            self.cfg_audiolang1 if cfg.tracksource.value == "xstreamity" else None,
+            self.cfg_audiolang2 if cfg.tracksource.value == "xstreamity" and cfg.audiolang1.value else None,
+            self.cfg_audiolang3 if cfg.tracksource.value == "xstreamity" and cfg.audiolang2.value else None,
+            self.cfg_audioac3 if cfg.tracksource.value == "xstreamity" and cfg.audiolang1.value else None,
+            self.cfg_sublang1 if cfg.tracksource.value == "xstreamity" else None,
+            self.cfg_sublang2 if cfg.tracksource.value == "xstreamity" and cfg.sublang1.value else None,
+            self.cfg_sublang3 if cfg.tracksource.value == "xstreamity" and cfg.sublang2.value else None,
+            self.cfg_subsamelang if cfg.tracksource.value == "xstreamity" and cfg.sublang1.value else None,
             self.cfg_livetype,
             self.cfg_vodtype,
             self.cfg_vodcategoryorder,

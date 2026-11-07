@@ -52,6 +52,7 @@ from . import _
 from . import xstreamity_globals as glob
 from .plugin import cfg, common_path, dir_tmp, pythonVer, screenwidth, skin_directory
 from .xStaticText import StaticText
+from .trackselection import XStreamityTrackSelection
 from .utils import _get_current_aspect_ratio, clearCaches
 
 try:
@@ -358,6 +359,7 @@ class XStreamity_CatchupPlayer(
     InfoBarMoviePlayerSummarySupport,
     SubsSupportStatus,
     SubsSupport,
+    XStreamityTrackSelection,
         Screen):
 
     ALLOW_SUSPEND = True
@@ -387,6 +389,8 @@ class XStreamity_CatchupPlayer(
             print(e)
 
         IPTVInfoBarPVRState.__init__(self, PVRState, True)
+
+        XStreamityTrackSelection.__init__(self, subtitles=not cfg.subs.value)
 
         self.ar_id_player = -1
         try:
@@ -527,6 +531,10 @@ class XStreamity_CatchupPlayer(
             self.session.nav.playService(self.reference)
         except Exception as e:
             print(e)
+
+        # start auto track selection directly - evStart is not sent when the
+        # stream is already playing (live preview) or by some stream types
+        self.startTrackSelection()
 
         nowref = self.session.nav.getCurrentlyPlayingServiceReference()
         if nowref:
